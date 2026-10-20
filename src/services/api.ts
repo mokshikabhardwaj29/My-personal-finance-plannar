@@ -203,7 +203,7 @@ export class ApiService {
         headers: this.getHeaders(),
       });
     } catch {
-      const netErr = new Error('Network failure: Unable to reach Ledgerly server. Please check your connection.');
+      const netErr = new Error('Network failure: Unable to reach NotePay server. Please check your connection.');
       (netErr as any).isNetworkError = true;
       throw netErr;
     }
@@ -419,7 +419,7 @@ export class ApiService {
         headers: this.getHeaders(),
       });
     } catch {
-      const netErr = new Error('Network failure: Unable to reach Ledgerly server. Please check your connection.');
+      const netErr = new Error('Network failure: Unable to reach NotePay server. Please check your connection.');
       (netErr as any).isNetworkError = true;
       throw netErr;
     }

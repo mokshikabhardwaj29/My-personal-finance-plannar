@@ -531,6 +531,11 @@ app.get('/api/state', (req: Request, res: Response) => {
 
     const game = gameEngine.getFullGameState();
     const settings = db.getAllSettings();
+    const plannerUserId = auth?.user?.id;
+    const notePayPlanner = plannerUserId
+      ? db.getSetting('notePayPlanner:' + plannerUserId, null)
+      : null;
+    if (notePayPlanner) settings.notePayPlanner = notePayPlanner;
 
     if (isChild) {
       // Child-Safe Scoped State: No family bank accounts, transactions, or receipts
@@ -543,6 +548,7 @@ app.get('/api/state', (req: Request, res: Response) => {
           accounts: ['My Digital Coin Jar'],
           goals: settings.goals || [],
           gameProfile: settings.gameProfile || {},
+          notePayPlanner: notePayPlanner || undefined,
           selectedPeriod: 'all-time',
         },
         documents: [],
@@ -886,6 +892,46 @@ app.put('/api/preferences', (req: Request, res: Response) => {
 
     if (body.selectedPeriod !== undefined && typeof body.selectedPeriod === 'string') {
       db.setSetting('selectedPeriod', body.selectedPeriod);
+    }
+
+    // NotePay planner settings are stored alongside existing preferences; never replace the full state.
+    if (body.notePayPlanner !== undefined && body.notePayPlanner && typeof body.notePayPlanner === 'object' && !Array.isArray(body.notePayPlanner)) {
+      const planner = body.notePayPlanner as Record<string, unknown>;
+      const allowance = Number(planner.allowance);
+      const savingsGoal = Number(planner.savingsGoal);
+      const savedAmount = Number(planner.savedAmount);
+      const dailyPlan = Number(planner.dailyPlan);
+      const note = typeof planner.note === 'string' ? planner.note.slice(0, 100) : '';
+      const auth = (req as AuthenticatedRequest).auth;
+      if (!auth?.user?.id) {
+        return res.status(401).json({ error: 'Authentication required to save a pocket-money plan' });
+      }
+      const settingKey = 'notePayPlanner:' + auth.user.id;
+      const existingPlanner = db.getSetting(settingKey, null) as { entries?: unknown[] } | null;
+      let entries = Array.isArray(existingPlanner?.entries) ? existingPlanner.entries : [];
+      if (planner.entries !== undefined) {
+        if (!Array.isArray(planner.entries) || planner.entries.length > 500) {
+          return res.status(400).json({ error: 'Pocket-money entries must be a list of at most 500 items' });
+        }
+        const validEntries = planner.entries.every((entry: any) =>
+          entry && typeof entry.id === 'string' && entry.id.length <= 80 &&
+          typeof entry.date === 'string' && /^\\d{4}-\\d{2}-\\d{2}$/.test(entry.date) &&
+          Number.isFinite(Number(entry.amount)) && Number(entry.amount) > 0 && Number(entry.amount) <= 1000000 &&
+          typeof entry.category === 'string' && entry.category.length <= 40 &&
+          typeof entry.note === 'string' && entry.note.length <= 100
+        );
+        if (!validEntries) return res.status(400).json({ error: 'One or more pocket-money entries are invalid' });
+        entries = planner.entries.map((entry: any) => ({
+          id: entry.id, date: entry.date, amount: Number(entry.amount),
+          category: entry.category, note: entry.note,
+        }));
+      }
+      if ([allowance, savingsGoal, savedAmount, dailyPlan].every((value) => Number.isFinite(value) && value >= 0 && value <= 100000000)) {
+        // Keep each account's planner separate without migrating or overwriting legacy settings.
+        db.setSetting(settingKey, { allowance, savingsGoal, savedAmount, dailyPlan, note, entries });
+      } else {
+        return res.status(400).json({ error: 'Invalid pocket-money planner values' });
+      }
     }
 
     if (body.userTimezone !== undefined && typeof body.userTimezone === 'string') {

@@ -189,7 +189,17 @@ export interface DetectedPatterns {
   recurring: DetectionSuggestion[];
 }
 
+export interface NotePayPlannerSettings {
+  allowance: number;
+  savingsGoal: number;
+  savedAmount: number;
+  dailyPlan: number;
+  note: string;
+  entries?: Array<{ id: string; date: string; amount: number; category: string; note: string }>;
+}
+
 export interface AppSettings {
+  notePayPlanner?: NotePayPlannerSettings;
   categories?: string[];
   accounts?: string[];
   selectedPeriod?: string;

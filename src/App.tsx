@@ -48,6 +48,7 @@ import { KidsAcademyPage } from './pages/KidsAcademyPage';
 import { AuthPage } from './pages/AuthPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { DatabasePage } from './pages/DatabasePage';
+import { NotePayPlannerPage } from './pages/NotePayPlannerPage';
 
 export default function App() {
   // Application initialization & loading states
@@ -137,7 +138,7 @@ export default function App() {
         setConnectionError('Access forbidden: your account does not have permission to view these records.');
         return;
       }
-      setConnectionError(err instanceof Error ? err.message : 'Failed to connect to Ledgerly');
+      setConnectionError(err instanceof Error ? err.message : 'Failed to connect to NotePay');
     } finally {
       setDataLoading(false);
     }
@@ -188,7 +189,7 @@ export default function App() {
         setIsLocked(true);
         return;
       }
-      setConnectionError(err instanceof Error ? err.message : 'Failed to connect to Ledgerly');
+      setConnectionError(err instanceof Error ? err.message : 'Failed to connect to NotePay');
     } finally {
       setIsInitializing(false);
     }
@@ -588,10 +589,10 @@ export default function App() {
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center select-none">
         <Penny mood="thinking" size={96} showSpeech={false} />
         <h2 className="text-xl font-black text-gray-900 mt-6 tracking-tight">
-          Ledgerly
+          NotePay
         </h2>
         <p className="text-xs text-gray-500 mt-1">
-          {isInitializing ? 'Checking secure session...' : 'Loading your family records...'}
+          {isInitializing ? 'Checking secure session...' : 'Loading your money plan...'}
         </p>
       </div>
     );
@@ -642,9 +643,9 @@ export default function App() {
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center select-none">
         <Penny mood="thinking" size={96} showSpeech={false} />
         <h2 className="text-xl font-black text-gray-900 mt-6 tracking-tight">
-          Ledgerly
+          NotePay
         </h2>
-        <p className="text-xs text-gray-500 mt-1">Loading your family records...</p>
+        <p className="text-xs text-gray-500 mt-1">Loading your money plan...</p>
       </div>
     );
   }
@@ -652,7 +653,7 @@ export default function App() {
   const isUnauthorized = () => {
     if (!currentUser) return false;
     if (currentUser.role === 'child') {
-      return currentTab !== 'kids' && currentTab !== 'goals' && currentTab !== 'rewards';
+      return !['kids', 'goals', 'rewards', 'planner', 'calendar', 'interest'].includes(currentTab);
     }
     if (currentUser.role === 'parent') {
       return currentTab === 'database';
@@ -827,6 +828,21 @@ export default function App() {
         )}
 
         {currentTab === 'kids' && <KidsAcademyPage />}
+
+        {['planner', 'calendar', 'interest'].includes(currentTab) && (
+          <NotePayPlannerPage
+            key={currentTab}
+            initialView={currentTab as 'planner' | 'calendar' | 'interest'}
+            settings={settings}
+            transactions={transactions}
+            role={currentUser.role}
+            onSavePlanner={async (planner) => {
+              const result = await api.savePreferences({ notePayPlanner: planner });
+              if (result.gameDelta) setLastGameDelta(result.gameDelta);
+              await loadState();
+            }}
+          />
+        )}
 
         {currentTab === 'documents' && (
           <DocumentsPage
