@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarDays, Calculator, PiggyBank, WalletCards, ChevronLeft, ChevronRight, Save, Sparkles } from 'lucide-react';
 import { AppSettings, Transaction } from '../types';
 import { formatRupee } from '../utils/format';
@@ -17,6 +17,7 @@ interface Props {
   settings: AppSettings;
   transactions: Transaction[];
   onSavePlanner: (planner: NotePayPlanner) => Promise<void>;
+  initialView?: 'planner' | 'calendar' | 'interest';
 }
 
 const DEFAULT_PLANNER: NotePayPlanner = { allowance: 500, savingsGoal: 2000, savedAmount: 0, dailyPlan: 100, note: '' };
@@ -26,8 +27,9 @@ const todayIso = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
 
-export const NotePayPlannerPage: React.FC<Props> = ({ settings, transactions, onSavePlanner }) => {
-  const [view, setView] = useState<View>('planner');
+export const NotePayPlannerPage: React.FC<Props> = ({ settings, transactions, onSavePlanner, initialView = 'planner' }) => {
+  const [view, setView] = useState<View>(initialView);
+  useEffect(() => setView(initialView), [initialView]);
   const [planner, setPlanner] = useState<NotePayPlanner>({ ...DEFAULT_PLANNER, ...(settings.notePayPlanner || {}) });
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState('');
