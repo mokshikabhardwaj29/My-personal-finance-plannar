@@ -573,7 +573,7 @@ export class ApiService {
     const res = await fetch('/api/game', {
       method: 'DELETE',
       headers: this.getHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ confirmation: 'RESET NOTEPAY PROGRESS' }),
+      body: JSON.stringify({ confirmation: 'RESET LEDGERLY PROGRESS' }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to reset progress' }));
@@ -586,7 +586,7 @@ export class ApiService {
     const res = await fetch('/api/state', {
       method: 'DELETE',
       headers: this.getHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ confirmation: 'DELETE ALL NOTEPAY DATA' }),
+      body: JSON.stringify({ confirmation: 'DELETE ALL LEDGERLY DATA' }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to erase data' }));
