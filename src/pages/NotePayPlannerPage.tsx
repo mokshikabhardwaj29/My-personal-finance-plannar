@@ -74,11 +74,16 @@ export const NotePayPlannerPage: React.FC<Props> = ({ settings, transactions, on
       ...planner,
       entries: [...(planner.entries || []), { id: `pocket_${Date.now()}`, date: selectedDate, amount: amountValue, category: entryCategory, note: entryNote.trim().slice(0, 100) }].slice(-500),
     };
-    await onSavePlanner(nextPlanner);
-    setPlanner(nextPlanner);
-    setEntryAmount('');
-    setEntryNote('');
-    setSavedMessage('Expense saved to your pocket-money calendar.');
+    setSavedMessage('');
+    try {
+      await onSavePlanner(nextPlanner);
+      setPlanner(nextPlanner);
+      setEntryAmount('');
+      setEntryNote('');
+      setSavedMessage('Expense saved to your pocket-money calendar.');
+    } catch {
+      setSavedMessage('Could not save this expense. Please try again.');
+    }
   };
 
   const savePlanner = async () => {
