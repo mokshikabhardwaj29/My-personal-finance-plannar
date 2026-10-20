@@ -12,7 +12,6 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { authService, User, UserRole, Family, UserProfileData } from './authService.js';
-import { DEFAULT_DRIVE_SYNC_SERVICE_KEY } from './cloudflareWorkerAuth.js';
 
 export interface AuthenticatedRequest extends Request {
   auth?: {
@@ -341,8 +340,8 @@ export function authorizationMiddleware(req: Request, res: Response, next: NextF
     const customDriveKey = req.headers['x-drive-sync-key'] as string | undefined;
     const driveKey = bearerToken || customDriveKey;
 
-    const expectedKey = process.env.DRIVE_SYNC_TOKEN || DEFAULT_DRIVE_SYNC_SERVICE_KEY;
-    if (driveKey && driveKey === expectedKey) {
+    const expectedKey = process.env.DRIVE_SYNC_TOKEN;
+    if (driveKey && expectedKey && driveKey === expectedKey) {
       // Authorized via service token bypass
       (req as AuthenticatedRequest).auth = {
         user: {
@@ -407,6 +406,21 @@ export function authorizationMiddleware(req: Request, res: Response, next: NextF
   const matchingRule = ROUTE_PERMISSIONS.find(
     (r) => r.method === req.method && r.pathPattern.test(req.path)
   );
+
+  // Deny by default: every protected API method/path must have an explicit permission rule.
+  if (!matchingRule) {
+    authService.logAudit({
+      actorUserId: authData.user.id,
+      action: 'unmapped_route_denied_403',
+      familyId: authData.family.id,
+      ip: req.ip,
+      details: { path: req.path, method: req.method, role: authData.role },
+    });
+    res.status(403).json({
+      error: 'Forbidden: This API route has no explicit authorization policy',
+    });
+    return;
+  }
 
   if (matchingRule) {
     // Check role permission
