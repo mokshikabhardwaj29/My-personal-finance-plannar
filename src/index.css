@@ -1,0 +1,243 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-happy: #ffd400;
+    --color-bat: #7f27a8;
+    --color-pond: #53b0c9;
+    --color-juice: #f76400;
+    --color-heart: #c1008f;
+    --color-cheek: #e885cf;
+  }
+
+  body {
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: #FAF6EF;
+    color: #23201C;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Fredoka', 'Outfit', sans-serif;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Fredoka', 'Outfit', sans-serif;
+  }
+  .font-body {
+    font-family: 'Outfit', sans-serif;
+  }
+
+  /* Smooth animations for Penny the mascot */
+  @keyframes penny-breathe {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.025) translateY(-1px);
+    }
+  }
+
+  @keyframes penny-hop {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    40% {
+      transform: translateY(-8px) scale(1.04);
+    }
+    60% {
+      transform: translateY(1px);
+    }
+  }
+
+  @keyframes penny-bounce {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    30% {
+      transform: translateY(-10px) scale(1.05);
+    }
+    60% {
+      transform: translateY(0) scale(0.98);
+    }
+  }
+
+  @keyframes penny-celebrate {
+    0%, 100% {
+      transform: translateY(0) rotate(0deg);
+    }
+    25% {
+      transform: translateY(-12px) rotate(-4deg) scale(1.06);
+    }
+    75% {
+      transform: translateY(-8px) rotate(4deg) scale(1.06);
+    }
+  }
+
+  @keyframes penny-spin {
+    0% {
+      transform: translateY(0) rotate(0deg);
+    }
+    40% {
+      transform: translateY(-16px) rotate(180deg) scale(1.1);
+    }
+    100% {
+      transform: translateY(0) rotate(360deg) scale(1);
+    }
+  }
+
+  @keyframes penny-wobble {
+    0%, 100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-5deg) translateY(-1px);
+    }
+    75% {
+      transform: rotate(5deg) translateY(-1px);
+    }
+  }
+
+  @keyframes penny-tilt {
+    0%, 100% {
+      transform: rotate(7deg);
+    }
+    50% {
+      transform: rotate(10deg) translateY(-2px);
+    }
+  }
+
+  @keyframes penny-sleep {
+    0%, 100% {
+      transform: scale(0.98);
+      opacity: 0.85;
+    }
+    50% {
+      transform: scale(1);
+      opacity: 0.95;
+    }
+  }
+
+  @keyframes penny-shake {
+    0%, 100% {
+      transform: translateX(0);
+    }
+    20%, 60% {
+      transform: translateX(-3px);
+    }
+    40%, 80% {
+      transform: translateX(3px);
+    }
+  }
+
+  @keyframes penny-glow {
+    0%, 100% {
+      transform: scale(1);
+      filter: drop-shadow(0 0 6px rgba(245, 184, 61, 0.4));
+    }
+    50% {
+      transform: scale(1.03);
+      filter: drop-shadow(0 0 14px rgba(245, 184, 61, 0.7));
+    }
+  }
+
+  @keyframes penny-peek {
+    0%, 100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+
+  @keyframes penny-comfort {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.01) translateY(1px);
+    }
+  }
+
+  @keyframes penny-wave-arm {
+    0%, 100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-25deg);
+    }
+    75% {
+      transform: rotate(15deg);
+    }
+  }
+
+  .animate-penny-breathe {
+    animation: penny-breathe 3.5s ease-in-out infinite;
+  }
+  .animate-penny-hop {
+    animation: penny-hop 1.4s ease-in-out infinite;
+  }
+  .animate-penny-bounce {
+    animation: penny-bounce 0.8s ease-in-out;
+  }
+  .animate-penny-celebrate {
+    animation: penny-celebrate 1.2s ease-in-out infinite;
+  }
+  .animate-penny-spin {
+    animation: penny-spin 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .animate-penny-wobble {
+    animation: penny-wobble 2s ease-in-out infinite;
+  }
+  .animate-penny-tilt {
+    animation: penny-tilt 2.5s ease-in-out infinite;
+  }
+  .animate-penny-sleep {
+    animation: penny-sleep 4s ease-in-out infinite;
+  }
+  .animate-penny-shake {
+    animation: penny-shake 0.8s ease-in-out;
+  }
+  .animate-penny-glow {
+    animation: penny-glow 2.5s ease-in-out infinite;
+  }
+  .animate-penny-peek {
+    animation: penny-peek 2s ease-in-out infinite;
+  }
+  .animate-penny-comfort {
+    animation: penny-comfort 3s ease-in-out infinite;
+  }
+  .animate-penny-wave-arm {
+    animation: penny-wave-arm 1s ease-in-out infinite;
+  }
+
+  /* Scale up modal animation */
+  @keyframes scale-up {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  .animate-scale-up {
+    animation: scale-up 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+}
+
+/* Reduced motion preference compliance */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
