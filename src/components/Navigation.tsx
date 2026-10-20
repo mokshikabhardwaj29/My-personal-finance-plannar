@@ -67,7 +67,7 @@ const ALL_TABS: Array<{
   badge?: string;
   allowedRoles: Array<'owner' | 'parent' | 'child'>;
 }> = [
-  { key: 'dashboard', label: 'Home', icon: LayoutDashboard, allowedRoles: ['owner', 'parent', 'child'] },
+  { key: 'dashboard', label: 'Home', icon: LayoutDashboard, allowedRoles: ['owner', 'parent'] },
   { key: 'planner', label: 'Pocket Planner', icon: WalletCards, allowedRoles: ['owner', 'parent', 'child'] },
   { key: 'calendar', label: 'Spending Calendar', icon: CalendarDays, allowedRoles: ['owner', 'parent', 'child'] },
   { key: 'interest', label: 'Simple Interest', icon: Calculator, allowedRoles: ['owner', 'parent', 'child'] },
