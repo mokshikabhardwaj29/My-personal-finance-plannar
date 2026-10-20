@@ -8,7 +8,13 @@ import { gameEngine, getUserLocalDate } from './server/gameEngine.js';
 import { detectRecurringPatterns } from './server/detectionEngine.js';
 import { handleKidsLearn } from './server/kidsTutor.js';
 import { computeCanonicalFingerprint } from './server/referenceDatasets.js';
-import { ownerAuthMiddleware, getOrCreateOwnerKey } from './server/authGuard.js';
+import { authService, UserRole } from './server/authService.js';
+import {
+  authorizationMiddleware,
+  AuthenticatedRequest,
+  extractSessionToken,
+} from './server/authorizationMiddleware.js';
+import { databaseService } from './server/databaseService.js';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -16,12 +22,437 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 // Body parsers with support for large documents and Drive batches
 app.use(express.json({ limit: '35mb' }));
 app.use(express.urlencoded({ extended: true, limit: '35mb' }));
-app.use(ownerAuthMiddleware);
+app.use(authorizationMiddleware);
 
-// Endpoint for authorized client to fetch session owner token
-app.get('/api/auth/token', (_req: Request, res: Response) => {
-  const token = getOrCreateOwnerKey();
-  res.json({ token, role: 'owner' });
+// Helper to set secure session cookie
+function setSessionCookie(res: Response, token: string) {
+  res.cookie('ledgerly_session', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+  });
+}
+
+// ============================================================================
+// Multi-User Identity & Authentication Endpoints
+// ============================================================================
+
+// Check whether the primary family vault ownership has been claimed
+app.get('/api/auth/claim-status', (_req: Request, res: Response) => {
+  const claimed = authService.isOwnershipClaimed();
+  res.json({ ownershipClaimed: claimed });
+});
+
+// Register a new user (first user claims ownership of the existing family vault)
+app.post('/api/auth/register', async (req: Request, res: Response) => {
+  try {
+    const { email, password, displayName } = req.body || {};
+    if (!email || !password) {
+      res.status(400).json({ error: 'Email and password are required' });
+      return;
+    }
+
+    const host = req.get('host') || 'localhost:3000';
+    const protocol = req.protocol || 'http';
+    const baseUrl = `${protocol}://${host}`;
+
+    const result = await authService.register({
+      email,
+      password,
+      displayName: displayName || email.split('@')[0],
+      ip: req.ip,
+      baseUrl,
+    });
+
+    setSessionCookie(res, result.sessionToken);
+
+    res.json({
+      success: true,
+      sessionToken: result.sessionToken,
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        emailVerified: Boolean(result.user.emailVerifiedAt),
+        status: result.user.status,
+      },
+      profile: result.profile,
+      family: result.family,
+      role: result.role,
+    });
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Registration failed' });
+  }
+});
+
+// Sign in with email and password
+app.post('/api/auth/login', async (req: Request, res: Response) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      res.status(400).json({ error: 'Email and password are required' });
+      return;
+    }
+
+    const result = await authService.login({
+      email,
+      password,
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+    });
+
+    setSessionCookie(res, result.sessionToken);
+
+    res.json({
+      success: true,
+      sessionToken: result.sessionToken,
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        emailVerified: Boolean(result.user.emailVerifiedAt),
+        status: result.user.status,
+      },
+      profile: result.profile,
+      family: result.family,
+      role: result.role,
+    });
+  } catch (err: unknown) {
+    res.status(401).json({ error: err instanceof Error ? err.message : 'Invalid email or password' });
+  }
+});
+
+// Quick PIN unlock on an already trusted device
+app.post('/api/auth/pin-unlock', async (req: Request, res: Response) => {
+  try {
+    const { userId, pin } = req.body || {};
+    if (!userId || !pin) {
+      res.status(400).json({ error: 'User ID and 4-digit PIN are required' });
+      return;
+    }
+
+    const result = await authService.unlockWithPin({
+      userId,
+      pin,
+      ip: req.ip,
+    });
+
+    setSessionCookie(res, result.sessionToken);
+
+    res.json({
+      success: true,
+      sessionToken: result.sessionToken,
+      user: {
+        id: result.user.id,
+        email: result.user.email,
+        emailVerified: Boolean(result.user.emailVerifiedAt),
+        status: result.user.status,
+      },
+      profile: result.profile,
+      family: result.family,
+      role: result.role,
+    });
+  } catch (err: unknown) {
+    res.status(401).json({ error: err instanceof Error ? err.message : 'PIN unlock failed' });
+  }
+});
+
+// Verify email address via single-use token
+app.post('/api/auth/verify-email', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body || {};
+    if (!token) {
+      res.status(400).json({ error: 'Verification token is required' });
+      return;
+    }
+
+    const result = await authService.verifyEmail(token, req.ip);
+    res.json(result);
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Verification failed' });
+  }
+});
+
+// Request password reset email
+app.post('/api/auth/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) {
+      res.status(400).json({ error: 'Email is required' });
+      return;
+    }
+
+    const host = req.get('host') || 'localhost:3000';
+    const protocol = req.protocol || 'http';
+    const baseUrl = `${protocol}://${host}`;
+
+    await authService.requestPasswordReset(email, baseUrl, req.ip);
+    res.json({
+      success: true,
+      message: 'If an account exists with this email, a password reset link has been dispatched.',
+    });
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Failed to request password reset' });
+  }
+});
+
+// Reset password with single-use token (invalidates all existing sessions)
+app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body || {};
+    if (!token || !newPassword) {
+      res.status(400).json({ error: 'Token and new password are required' });
+      return;
+    }
+
+    const result = await authService.resetPassword(token, newPassword, req.ip);
+    res.clearCookie('ledgerly_session');
+    res.json(result);
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Password reset failed' });
+  }
+});
+
+// Fetch caller's authenticated user profile & family details
+app.get('/api/auth/me', (req: Request, res: Response) => {
+  const auth = (req as AuthenticatedRequest).auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  res.json({
+    authenticated: true,
+    user: {
+      id: auth.user.id,
+      email: auth.user.email,
+      emailVerified: Boolean(auth.user.emailVerifiedAt),
+      status: auth.user.status,
+    },
+    profile: auth.profile,
+    family: auth.family,
+    role: auth.role,
+  });
+});
+
+// First-login onboarding (demographics, optional gender, interests, quick PIN)
+app.post('/api/auth/onboarding', async (req: Request, res: Response) => {
+  try {
+    const auth = (req as AuthenticatedRequest).auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Unauthenticated' });
+      return;
+    }
+
+    const { displayName, dateOfBirth, age, gender, interests, preferences, quickPin } = req.body || {};
+
+    const updatedProfile = await authService.completeOnboarding(
+      auth.user.id,
+      {
+        displayName,
+        dateOfBirth,
+        age,
+        gender: gender || null, // Optional, never forced
+        interests: Array.isArray(interests) ? interests : [],
+        preferences: typeof preferences === 'object' ? preferences : {},
+        quickPin,
+      },
+      req.ip
+    );
+
+    res.json({ success: true, profile: updatedProfile });
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Failed to complete onboarding' });
+  }
+});
+
+// Logout endpoint (invalidates session and clears cookie)
+app.post('/api/auth/logout', (req: Request, res: Response) => {
+  const token = extractSessionToken(req);
+  if (token) {
+    authService.logout(token, req.ip);
+  }
+  res.clearCookie('ledgerly_session');
+  res.json({ success: true, message: 'Signed out successfully' });
+});
+
+// ============================================================================
+// Family & Child Account Management (India DPDP Act 2023 Compliant)
+// ============================================================================
+
+// List all family members
+app.get('/api/family/members', (req: Request, res: Response) => {
+  const auth = (req as AuthenticatedRequest).auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  const members = authService.getFamilyMembersWithProfiles(auth.family.id);
+  res.json({ family: auth.family, members });
+});
+
+// Parent/Owner creates child account with mandatory verifiable parental consent
+app.post('/api/family/children', async (req: Request, res: Response) => {
+  try {
+    const auth = (req as AuthenticatedRequest).auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Unauthenticated' });
+      return;
+    }
+
+    const { displayName, age, dateOfBirth, quickPin, parentalConsentGranted } = req.body || {};
+
+    const result = await authService.createChildAccount(auth.user.id, {
+      displayName,
+      age: Number(age) || 10,
+      dateOfBirth,
+      quickPin,
+      parentalConsentGranted: Boolean(parentalConsentGranted),
+      ip: req.ip,
+    });
+
+    res.json({
+      success: true,
+      childUser: {
+        id: result.childUser.id,
+        email: result.childUser.email,
+      },
+      childProfile: result.childProfile,
+      consent: result.consent,
+    });
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Failed to create child account' });
+  }
+});
+
+// Parent/Owner revokes consent and deletes child data
+app.delete('/api/family/children/:id', (req: Request, res: Response) => {
+  try {
+    const auth = (req as AuthenticatedRequest).auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Unauthenticated' });
+      return;
+    }
+
+    const childId = req.params.id;
+    const result = authService.revokeChildConsentAndDelete(auth.user.id, childId, req.ip);
+    res.json(result);
+  } catch (err: unknown) {
+    res.status(403).json({ error: err instanceof Error ? err.message : 'Failed to revoke child consent' });
+  }
+});
+
+// Owner invites new family member (parent or child)
+app.post('/api/family/invites', async (req: Request, res: Response) => {
+  try {
+    const auth = (req as AuthenticatedRequest).auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Unauthenticated' });
+      return;
+    }
+
+    const { email, role, displayName } = req.body || {};
+    const result = await authService.inviteMember(auth.user.id, {
+      email,
+      role: role || 'parent',
+      displayName,
+      ip: req.ip,
+    });
+
+    res.json({
+      success: true,
+      user: {
+        id: result.memberUser.id,
+        email: result.memberUser.email,
+      },
+      profile: result.memberProfile,
+    });
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Failed to invite family member' });
+  }
+});
+
+// Owner removes family member
+app.delete('/api/family/members/:id', (req: Request, res: Response) => {
+  try {
+    const auth = (req as AuthenticatedRequest).auth;
+    if (!auth) {
+      res.status(401).json({ error: 'Unauthenticated' });
+      return;
+    }
+
+    const targetUserId = req.params.id;
+    const result = authService.removeMember(auth.user.id, targetUserId, req.ip);
+    res.json(result);
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Failed to remove family member' });
+  }
+});
+
+// Owner views family security audit log
+app.get('/api/family/audit-log', (req: Request, res: Response) => {
+  const auth = (req as AuthenticatedRequest).auth;
+  if (!auth) {
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+
+  const logs = authService.getFamilyAuditLogs(auth.family.id);
+  res.json({ logs });
+});
+
+// ============================================================================
+// Cloudflare D1 Database Introspection & SQL Query Endpoints
+// ============================================================================
+
+// Get high-level database health, Cloudflare D1 status, R2 bucket stats, and table summaries
+app.get('/api/database/status', async (_req: Request, res: Response) => {
+  try {
+    const status = await databaseService.getStatus();
+    res.json(status);
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to fetch database status' });
+  }
+});
+
+// Get table rows with pagination and search
+app.get('/api/database/tables/:tableName', (req: Request, res: Response) => {
+  try {
+    const { tableName } = req.params;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const limit = parseInt(req.query.limit as string, 10) || 20;
+    const search = (req.query.search as string) || '';
+
+    const data = databaseService.getTableRows(tableName, { page, limit, search });
+    res.json(data);
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Failed to query table' });
+  }
+});
+
+// Execute interactive SQL queries against D1
+app.post('/api/database/query', (req: Request, res: Response) => {
+  try {
+    const { sql } = req.body || {};
+    if (!sql || typeof sql !== 'string') {
+      res.status(400).json({ error: 'SQL query string is required' });
+      return;
+    }
+    const result = databaseService.executeQuery(sql);
+    res.json(result);
+  } catch (err: unknown) {
+    res.status(400).json({ error: err instanceof Error ? err.message : 'Query execution error' });
+  }
+});
+
+// Run live 31-test verification suite
+app.post('/api/database/verify', async (_req: Request, res: Response) => {
+  try {
+    const result = await databaseService.runVerificationSuite();
+    res.json(result);
+  } catch (err: unknown) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Verification suite execution error' });
+  }
 });
 
 // Multer memory storage for uploads (up to 20MB per file)
@@ -65,14 +496,38 @@ function applyRulesToTransaction(tx: Partial<TransactionRow>, rules: RuleRow[]):
 // ----------------------------------------------------
 // 1. GET /api/state
 // ----------------------------------------------------
-app.get('/api/state', (_req: Request, res: Response) => {
+app.get('/api/state', (req: Request, res: Response) => {
   try {
+    const auth = (req as AuthenticatedRequest).auth;
+    const isChild = auth?.role === 'child';
+
+    const game = gameEngine.getFullGameState();
+    const settings = db.getAllSettings();
+
+    if (isChild) {
+      // Child-Safe Scoped State: No family bank accounts, transactions, or receipts
+      return res.json({
+        transactions: [],
+        tags: [],
+        rules: [],
+        settings: {
+          categories: ['Savings Jar', 'Dream Goals'],
+          accounts: ['My Digital Coin Jar'],
+          goals: settings.goals || [],
+          gameProfile: settings.gameProfile || {},
+          selectedPeriod: 'all-time',
+        },
+        documents: [],
+        game,
+        detected: { recurring: [], subscriptions: [] },
+      });
+    }
+
+    // Owner and Parent get full family vault financial state
     const transactions = db.getTransactions(5000);
     const tags = db.getTags();
     const rules = db.getRules();
-    const settings = db.getAllSettings();
     const documents = db.getDocuments(100);
-    const game = gameEngine.getFullGameState();
 
     const dismissedPatterns = (settings.dismissedPatterns as string[]) || [];
     const detected = detectRecurringPatterns(transactions, dismissedPatterns);

@@ -124,6 +124,17 @@ class LedgerlyDatabase {
     }
   }
 
+  public getState(): DatabaseState {
+    return {
+      transactions: [...this.state.transactions],
+      tags: [...this.state.tags],
+      rules: [...this.state.rules],
+      settings: { ...this.state.settings },
+      documents: [...this.state.documents],
+      game_events: [...this.state.game_events],
+    };
+  }
+
   // --- Transactions ---
   public getTransactions(limit = 5000): TransactionRow[] {
     return [...this.state.transactions]

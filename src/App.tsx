@@ -11,6 +11,7 @@ import {
   PeriodKey,
   GameDelta,
   DetectionSuggestion,
+  UserProfile,
 } from './types';
 import { api } from './services/api';
 import { Navigation, TabKey } from './components/Navigation';
@@ -29,6 +30,8 @@ import { RuleModal } from './components/modals/RuleModal';
 import { DriveSyncModal } from './components/modals/DriveSyncModal';
 import { ResetProgressModal } from './components/modals/ResetProgressModal';
 import { DataWipeModal } from './components/modals/DataWipeModal';
+import { SwitchMemberModal } from './components/modals/SwitchMemberModal';
+import { ShieldAlert } from 'lucide-react';
 
 // Pages
 import { DashboardPage } from './pages/DashboardPage';
@@ -42,11 +45,20 @@ import { DocumentsPage } from './pages/DocumentsPage';
 import { RulesPage } from './pages/RulesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { KidsAcademyPage } from './pages/KidsAcademyPage';
+import { AuthPage } from './pages/AuthPage';
+import { OnboardingPage } from './pages/OnboardingPage';
+import { DatabasePage } from './pages/DatabasePage';
 
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [appState, setAppState] = useState<AppStatePayload | null>(null);
+
+  // Authentication & Session
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [userProfile, setUserProfile] = useState<any | null>(null);
+  const [isLocked, setIsLocked] = useState(false);
+  const [isSwitchMemberOpen, setIsSwitchMemberOpen] = useState(false);
 
   // Tab navigation
   const [currentTab, setCurrentTab] = useState<TabKey>('dashboard');
@@ -86,8 +98,21 @@ export default function App() {
   const loadState = useCallback(async () => {
     try {
       setLoadError(null);
-      const data = await api.fetchState();
+      const [data, sess] = await Promise.all([
+        api.fetchState(),
+        api.getSession().catch(() => ({ authenticated: false, user: null })),
+      ]);
       setAppState(data);
+
+      if (sess && sess.user) {
+        setCurrentUser({
+          id: sess.user.id,
+          email: sess.user.email,
+          name: sess.profile?.displayName || sess.user.email.split('@')[0],
+          role: sess.role || 'owner',
+        });
+        setUserProfile(sess.profile);
+      }
 
       // Period restore
       const savedPeriod = (data.settings.selectedPeriod as PeriodKey) || 'all-time';
@@ -112,6 +137,52 @@ export default function App() {
       setLoading(false);
     }
   }, []);
+
+  const handleAuthSuccess = (sessionData: {
+    user: any;
+    profile: any;
+    family: any;
+    role: 'owner' | 'parent' | 'child';
+  }) => {
+    setCurrentUser({
+      id: sessionData.user.id,
+      email: sessionData.user.email,
+      name: sessionData.profile?.displayName || sessionData.user.email.split('@')[0],
+      role: sessionData.role,
+    });
+    setUserProfile(sessionData.profile);
+    setIsLocked(false);
+    if (sessionData.role === 'child') {
+      setCurrentTab('kids');
+    }
+    loadState();
+  };
+
+  const handleOnboardingCompleted = (updatedProfile: any) => {
+    setUserProfile(updatedProfile);
+    if (currentUser) {
+      setCurrentUser({
+        ...currentUser,
+        name: updatedProfile.displayName || currentUser.name,
+      });
+    }
+    loadState();
+  };
+
+  const handleSwitchedMember = (user: UserProfile) => {
+    setCurrentUser(user);
+    if (user.role === 'child') {
+      setCurrentTab('kids');
+    }
+    loadState();
+  };
+
+  const handleLogout = async () => {
+    await api.logout();
+    setCurrentUser(null);
+    setUserProfile(null);
+    setIsLocked(true);
+  };
 
   useEffect(() => {
     loadState();
@@ -471,6 +542,36 @@ export default function App() {
     );
   }
 
+  // Lock / Login Screen
+  if (isLocked || !currentUser) {
+    return (
+      <AuthPage
+        onAuthSuccess={handleAuthSuccess}
+      />
+    );
+  }
+
+  // First-time onboarding screen
+  if (currentUser && userProfile && !userProfile.onboardingCompletedAt) {
+    return (
+      <OnboardingPage
+        initialDisplayName={userProfile.displayName || currentUser.name}
+        onCompleted={handleOnboardingCompleted}
+      />
+    );
+  }
+
+  const isUnauthorized = () => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'child') {
+      return currentTab !== 'kids' && currentTab !== 'goals' && currentTab !== 'rewards';
+    }
+    if (currentUser.role === 'parent') {
+      return currentTab === 'database';
+    }
+    return false;
+  };
+
   const { transactions, tags, rules, settings, documents, game, detected } = appState;
   const categories = settings.categories || [];
   const accounts = settings.accounts || [];
@@ -494,10 +595,40 @@ export default function App() {
         onOpenAddEntry={() => setIsAddEntryOpen(true)}
         onOpenImport={() => setIsImportOpen(true)}
         onOpenDriveSync={() => setIsDriveSyncOpen(true)}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onOpenSwitchMember={() => setIsSwitchMemberOpen(true)}
       />
 
       {/* Main Page Content Area */}
       <main className="flex-1 min-w-0 pb-24 lg:pb-12 px-4 md:px-8 pt-6 max-w-7xl mx-auto w-full">
+        {isUnauthorized() ? (
+          <div className="bg-white rounded-3xl border-2 border-[#E7DECE] p-8 md:p-12 text-center max-w-xl mx-auto my-12 shadow-sm space-y-4">
+            <Penny mood="concerned" size={72} showSpeech={false} />
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-100 text-amber-900 text-xs font-black uppercase">
+              <ShieldAlert className="w-4 h-4" />
+              <span>403 Restricted Access</span>
+            </div>
+            <h2 className="text-xl font-display font-black text-[#23201C]">
+              Ask Your Family Organizer for Access
+            </h2>
+            <p className="text-xs text-[#5F574D] leading-relaxed max-w-md mx-auto">
+              {currentUser?.role === 'child'
+                ? "Your account is a Child Safe learning profile. Transactions, budgets, documents, and database tools are managed by your parent or family owner."
+                : "The Database & D1 SQL console is restricted to the Family Vault Owner."}
+            </p>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setCurrentTab(currentUser?.role === 'child' ? 'kids' : 'dashboard')}
+                className="px-6 py-2.5 rounded-2xl bg-[#7f27a8] text-white text-xs font-black shadow-[0_3px_0_0_#4c1d95] hover:brightness-105 active:translate-y-[2px] transition cursor-pointer"
+              >
+                {currentUser?.role === 'child' ? 'Return to Kids Academy' : 'Return to Dashboard'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
         {currentTab === 'dashboard' && (
           <DashboardPage
             transactions={transactions}
@@ -643,6 +774,7 @@ export default function App() {
           <SettingsPage
             settings={settings}
             game={game}
+            currentUser={currentUser}
             onSavePreferences={async (prefs) => {
               const res = await api.savePreferences(prefs);
               if (res.gameDelta) setLastGameDelta(res.gameDelta);
@@ -652,6 +784,10 @@ export default function App() {
             onOpenDataWipeModal={() => setIsDataWipeOpen(true)}
             onRestoreIgnoredSuggestions={handleRestoreIgnored}
           />
+        )}
+
+        {currentTab === 'database' && <DatabasePage />}
+          </>
         )}
       </main>
 
@@ -757,6 +893,15 @@ export default function App() {
         onClose={() => setIsDataWipeOpen(false)}
         onConfirmWipe={handleConfirmDataWipe}
       />
+
+      {currentUser && (
+        <SwitchMemberModal
+          isOpen={isSwitchMemberOpen}
+          onClose={() => setIsSwitchMemberOpen(false)}
+          currentUserId={currentUser.id}
+          onSwitched={handleSwitchedMember}
+        />
+      )}
     </div>
   );
 }

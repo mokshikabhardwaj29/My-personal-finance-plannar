@@ -26,6 +26,10 @@ import {
 import { detectRecurringPatterns } from './detectionEngine.js';
 import { gameEngine, getUserLocalDate } from './gameEngine.js';
 import { getOrCreateOwnerKey, verifyOwnerToken } from './authGuard.js';
+import {
+  cloudflareWorkerAuthMiddleware,
+  DEFAULT_DRIVE_SYNC_SERVICE_KEY,
+} from './cloudflareWorkerAuth.js';
 
 interface TestResult {
   name: string;
@@ -262,6 +266,58 @@ export async function runFullVerification(): Promise<{ passed: boolean; results:
 
   const invalidTokenCheck = verifyOwnerToken('malicious_or_forged_key_0000000000000000000000000000000000000000000000');
   assert(invalidTokenCheck === false, 'Owner Privacy: Invalid/forged token rejected');
+
+  // --------------------------------------------------------------------------
+  // Test 9: Cloudflare Worker Authentication Middleware & Drive-Sync Bearer Bypass
+  // --------------------------------------------------------------------------
+  const mockEnv = {
+    OWNER_SECRET_KEY: ownerToken,
+    DRIVE_SYNC_TOKEN: DEFAULT_DRIVE_SYNC_SERVICE_KEY,
+  };
+
+  // Test 9a: Protected route /api/state without token must be rejected with 401
+  const reqUnauth = new Request('https://ledgerly.family/api/state', {
+    method: 'GET',
+  });
+  const resUnauth = await cloudflareWorkerAuthMiddleware(reqUnauth, mockEnv);
+  assert(resUnauth !== null && resUnauth.status === 401, 'Worker Auth: Protected route /api/state without token rejected (401)');
+
+  // Test 9b: Protected route /api/state with valid owner token must be allowed (null response means continue)
+  const reqAuth = new Request('https://ledgerly.family/api/state', {
+    method: 'GET',
+    headers: { 'x-ledgerly-owner-key': ownerToken },
+  });
+  const resAuth = await cloudflareWorkerAuthMiddleware(reqAuth, mockEnv);
+  assert(resAuth === null, 'Worker Auth: Protected route /api/state with valid owner token allowed');
+
+  // Test 9c: Bearer token header bypass for /api/drive-sync with valid service token
+  const reqDriveSyncBypass = new Request('https://ledgerly.family/api/drive-sync', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${DEFAULT_DRIVE_SYNC_SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  const resDriveSyncBypass = await cloudflareWorkerAuthMiddleware(reqDriveSyncBypass, mockEnv);
+  assert(resDriveSyncBypass === null, 'Worker Auth: /api/drive-sync Bearer token header bypass granted');
+
+  // Test 9d: /api/drive-sync with forged/invalid Bearer token must be rejected with 401
+  const reqDriveSyncInvalid = new Request('https://ledgerly.family/api/drive-sync', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer invalid_or_forged_drive_token_xyz',
+      'Content-Type': 'application/json',
+    },
+  });
+  const resDriveSyncInvalid = await cloudflareWorkerAuthMiddleware(reqDriveSyncInvalid, mockEnv);
+  assert(resDriveSyncInvalid !== null && resDriveSyncInvalid.status === 401, 'Worker Auth: /api/drive-sync forged Bearer token rejected (401)');
+
+  // Test 9e: Static non-API route passes through route-level protection
+  const reqStatic = new Request('https://ledgerly.family/dashboard', {
+    method: 'GET',
+  });
+  const resStatic = await cloudflareWorkerAuthMiddleware(reqStatic, mockEnv);
+  assert(resStatic === null, 'Worker Auth: Non-API route /dashboard allowed without authentication');
 
   // --------------------------------------------------------------------------
   // Clean up: Reset to pristine empty state per Empty-Start Contract

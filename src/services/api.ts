@@ -1,8 +1,392 @@
-import { AppStatePayload, Transaction, GameDelta, AppSettings, DocumentMeta } from '../types';
+import {
+  AppStatePayload,
+  Transaction,
+  GameDelta,
+  AppSettings,
+  DocumentMeta,
+  UserProfile,
+  DatabaseStatus,
+  QueryResult,
+  VerificationSuiteResult,
+} from '../types';
 
 export class ApiService {
+  private token: string | null = null;
+
+  constructor() {
+    try {
+      this.token = localStorage.getItem('ledgerly_auth_token') || sessionStorage.getItem('ledgerly_auth_token');
+    } catch {
+      this.token = null;
+    }
+  }
+
+  public setAuthToken(token: string | null, remember = true) {
+    this.token = token;
+    try {
+      if (token) {
+        if (remember) {
+          localStorage.setItem('ledgerly_auth_token', token);
+        } else {
+          sessionStorage.setItem('ledgerly_auth_token', token);
+        }
+      } else {
+        localStorage.removeItem('ledgerly_auth_token');
+        sessionStorage.removeItem('ledgerly_auth_token');
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }
+
+  public getAuthToken(): string | null {
+    return this.token;
+  }
+
+  private getHeaders(customHeaders: Record<string, string> = {}): Record<string, string> {
+    const headers: Record<string, string> = { ...customHeaders };
+    if (this.token) {
+      headers['x-ledgerly-owner-key'] = this.token;
+      headers['Authorization'] = `Bearer ${this.token}`;
+    }
+    return headers;
+  }
+
+  // ==========================================================================
+  // Multi-User Authentication & Family Session
+  // ==========================================================================
+
+  async getClaimStatus(): Promise<{ ownershipClaimed: boolean }> {
+    const res = await fetch('/api/auth/claim-status');
+    if (!res.ok) return { ownershipClaimed: false };
+    return res.json();
+  }
+
+  async register(payload: {
+    email: string;
+    password: string;
+    displayName: string;
+    remember?: boolean;
+  }): Promise<{
+    success: boolean;
+    sessionToken: string;
+    user: { id: string; email: string; emailVerified: boolean; status: string };
+    profile: any;
+    family: any;
+    role: 'owner' | 'parent' | 'child';
+  }> {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Registration failed' }));
+      throw new Error(err.error || 'Registration failed');
+    }
+    const data = await res.json();
+    this.setAuthToken(data.sessionToken, payload.remember ?? true);
+    return data;
+  }
+
+  async login(payload: {
+    email: string;
+    password?: string;
+    remember?: boolean;
+  }): Promise<{
+    success: boolean;
+    sessionToken: string;
+    user: { id: string; email: string; emailVerified: boolean; status: string };
+    profile: any;
+    family: any;
+    role: 'owner' | 'parent' | 'child';
+  }> {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Login failed' }));
+      throw new Error(err.error || 'Login failed');
+    }
+    const data = await res.json();
+    this.setAuthToken(data.sessionToken, payload.remember ?? true);
+    return data;
+  }
+
+  async pinUnlock(payload: {
+    userId: string;
+    pin: string;
+    remember?: boolean;
+  }): Promise<{
+    success: boolean;
+    sessionToken: string;
+    user: { id: string; email: string; emailVerified: boolean; status: string };
+    profile: any;
+    family: any;
+    role: 'owner' | 'parent' | 'child';
+  }> {
+    const res = await fetch('/api/auth/pin-unlock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'PIN unlock failed' }));
+      throw new Error(err.error || 'PIN unlock failed');
+    }
+    const data = await res.json();
+    this.setAuthToken(data.sessionToken, payload.remember ?? true);
+    return data;
+  }
+
+  async verifyEmail(token: string): Promise<{ success: boolean; user: any }> {
+    const res = await fetch('/api/auth/verify-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Verification failed' }));
+      throw new Error(err.error || 'Verification failed');
+    }
+    return res.json();
+  }
+
+  async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to request password reset' }));
+      throw new Error(err.error || 'Failed to request password reset');
+    }
+    return res.json();
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ success: boolean }> {
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, newPassword }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Password reset failed' }));
+      throw new Error(err.error || 'Password reset failed');
+    }
+    return res.json();
+  }
+
+  async getMe(): Promise<{
+    authenticated: boolean;
+    user: { id: string; email: string; emailVerified: boolean; status: string } | null;
+    profile: any | null;
+    family: any | null;
+    role: 'owner' | 'parent' | 'child' | null;
+  }> {
+    const res = await fetch('/api/auth/me', {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      return { authenticated: false, user: null, profile: null, family: null, role: null };
+    }
+    return res.json();
+  }
+
+  async getSession(): Promise<{
+    authenticated: boolean;
+    user: { id: string; email: string; emailVerified: boolean; status: string } | null;
+    profile: any | null;
+    family: any | null;
+    role: 'owner' | 'parent' | 'child' | null;
+  }> {
+    return this.getMe();
+  }
+
+  async completeOnboarding(payload: {
+    displayName?: string;
+    dateOfBirth?: string;
+    age?: number;
+    gender?: 'male' | 'female' | 'non-binary' | 'prefer_not_to_say' | null;
+    interests?: string[];
+    preferences?: Record<string, unknown>;
+    quickPin?: string;
+  }): Promise<{ success: boolean; profile: any }> {
+    const res = await fetch('/api/auth/onboarding', {
+      method: 'POST',
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to complete onboarding' }));
+      throw new Error(err.error || 'Failed to complete onboarding');
+    }
+    return res.json();
+  }
+
+  async logout(): Promise<void> {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+      });
+    } finally {
+      this.setAuthToken(null);
+    }
+  }
+
+  async getFamilyMembers(): Promise<{ family: any; members: any[] }> {
+    const res = await fetch('/api/family/members', {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to fetch family members' }));
+      throw new Error(err.error || 'Failed to fetch family members');
+    }
+    return res.json();
+  }
+
+  async createChild(payload: {
+    displayName: string;
+    age: number;
+    dateOfBirth?: string;
+    quickPin: string;
+    parentalConsentGranted: boolean;
+  }): Promise<{ success: boolean; childUser: any; childProfile: any; consent: any }> {
+    const res = await fetch('/api/family/children', {
+      method: 'POST',
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to create child account' }));
+      throw new Error(err.error || 'Failed to create child account');
+    }
+    return res.json();
+  }
+
+  async deleteChild(childId: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`/api/family/children/${encodeURIComponent(childId)}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to delete child account' }));
+      throw new Error(err.error || 'Failed to delete child account');
+    }
+    return res.json();
+  }
+
+  async inviteMember(payload: {
+    email: string;
+    role: 'parent' | 'child';
+    displayName?: string;
+  }): Promise<{ success: boolean; user: any; profile: any }> {
+    const res = await fetch('/api/family/invites', {
+      method: 'POST',
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to invite family member' }));
+      throw new Error(err.error || 'Failed to invite family member');
+    }
+    return res.json();
+  }
+
+  async removeMember(userId: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`/api/family/members/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to remove member' }));
+      throw new Error(err.error || 'Failed to remove member');
+    }
+    return res.json();
+  }
+
+  async getFamilyAuditLogs(): Promise<{ logs: any[] }> {
+    const res = await fetch('/api/family/audit-log', {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to fetch audit log' }));
+      throw new Error(err.error || 'Failed to fetch audit log');
+    }
+    return res.json();
+  }
+
+  // ==========================================================================
+  // Database & D1 Introspection
+  // ==========================================================================
+
+  async getDatabaseStatus(): Promise<DatabaseStatus> {
+    const res = await fetch('/api/database/status', {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to fetch database status' }));
+      throw new Error(err.error || 'Failed to fetch database status');
+    }
+    return res.json();
+  }
+
+  async getTableRows(
+    tableName: string,
+    options: { page?: number; limit?: number; search?: string } = {}
+  ): Promise<{ tableName: string; page: number; limit: number; total: number; rows: unknown[] }> {
+    const params = new URLSearchParams();
+    if (options.page) params.set('page', String(options.page));
+    if (options.limit) params.set('limit', String(options.limit));
+    if (options.search) params.set('search', options.search);
+
+    const res = await fetch(`/api/database/tables/${encodeURIComponent(tableName)}?${params.toString()}`, {
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to fetch table records' }));
+      throw new Error(err.error || 'Failed to fetch table records');
+    }
+    return res.json();
+  }
+
+  async executeDatabaseQuery(sql: string): Promise<QueryResult> {
+    const res = await fetch('/api/database/query', {
+      method: 'POST',
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ sql }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Query execution error' }));
+      throw new Error(err.error || 'Query execution error');
+    }
+    return res.json();
+  }
+
+  async runDatabaseVerification(): Promise<VerificationSuiteResult> {
+    const res = await fetch('/api/database/verify', {
+      method: 'POST',
+      headers: this.getHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Verification test run failed' }));
+      throw new Error(err.error || 'Verification test run failed');
+    }
+    return res.json();
+  }
+
+  // ==========================================================================
+  // Financial State & Transactions
+  // ==========================================================================
+
   async fetchState(): Promise<AppStatePayload> {
-    const res = await fetch('/api/state');
+    const res = await fetch('/api/state', {
+      headers: this.getHeaders(),
+    });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to fetch state' }));
       throw new Error(err.error || 'Failed to fetch state');
@@ -15,7 +399,7 @@ export class ApiService {
   ): Promise<{ inserted: number; duplicates: number; transactions: Transaction[]; gameDelta: GameDelta }> {
     const res = await fetch('/api/transactions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(items),
     });
     if (!res.ok) {
@@ -31,7 +415,7 @@ export class ApiService {
   ): Promise<{ transaction: Transaction; gameDelta: GameDelta }> {
     const res = await fetch('/api/transactions', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ id, ...updates }),
     });
     if (!res.ok) {
@@ -44,6 +428,7 @@ export class ApiService {
   async deleteTransaction(id: string): Promise<{ success: boolean; id: string }> {
     const res = await fetch(`/api/transactions?id=${encodeURIComponent(id)}`, {
       method: 'DELETE',
+      headers: this.getHeaders(),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to delete transaction' }));
@@ -55,7 +440,7 @@ export class ApiService {
   async savePreferences(preferences: Partial<AppSettings> & Record<string, unknown>): Promise<{ settings: AppSettings; gameDelta: GameDelta }> {
     const res = await fetch('/api/preferences', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(preferences),
     });
     if (!res.ok) {
@@ -72,6 +457,7 @@ export class ApiService {
     }
     const res = await fetch('/api/documents', {
       method: 'POST',
+      headers: this.getHeaders(),
       body: formData,
     });
     if (!res.ok) {
@@ -84,6 +470,7 @@ export class ApiService {
   async deleteDocument(id: string): Promise<{ success: boolean; id: string }> {
     const res = await fetch(`/api/documents/${encodeURIComponent(id)}`, {
       method: 'DELETE',
+      headers: this.getHeaders(),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to delete document' }));
@@ -101,7 +488,9 @@ export class ApiService {
     processedFileIds: string[];
     resetAt: string | null;
   }> {
-    const res = await fetch('/api/drive-sync');
+    const res = await fetch('/api/drive-sync', {
+      headers: this.getHeaders(),
+    });
     if (!res.ok) {
       throw new Error('Failed to fetch Drive sync status');
     }
@@ -124,7 +513,7 @@ export class ApiService {
   }> {
     const res = await fetch('/api/drive-sync', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -135,13 +524,16 @@ export class ApiService {
   }
 
   async acknowledgeSeenGameEvents(): Promise<void> {
-    await fetch('/api/game/seen', { method: 'POST' }).catch(() => {});
+    await fetch('/api/game/seen', {
+      method: 'POST',
+      headers: this.getHeaders(),
+    }).catch(() => {});
   }
 
   async resetProgress(): Promise<{ success: boolean; game: unknown }> {
     const res = await fetch('/api/game', {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ confirmation: 'RESET LEDGERLY PROGRESS' }),
     });
     if (!res.ok) {
@@ -154,7 +546,7 @@ export class ApiService {
   async eraseAllData(): Promise<{ success: boolean; message: string }> {
     const res = await fetch('/api/state', {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ confirmation: 'DELETE ALL LEDGERLY DATA' }),
     });
     if (!res.ok) {
@@ -174,7 +566,7 @@ export class ApiService {
   }): Promise<{ success: boolean; result: string; mode: string; source: string }> {
     const res = await fetch('/api/gemini/kids-learn', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.getHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(params),
     });
     if (!res.ok) {

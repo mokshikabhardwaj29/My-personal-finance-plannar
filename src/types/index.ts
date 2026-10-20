@@ -254,3 +254,101 @@ export type PennyMood =
   | 'proud'
   | 'peek'
   | 'comfort';
+
+export interface User {
+  id: string;
+  email: string;
+  emailVerified: boolean;
+  status: 'active' | 'pending_verification' | 'suspended';
+}
+
+export interface Family {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface UserProfileData {
+  userId: string;
+  displayName: string;
+  dateOfBirth: string | null;
+  age: number | null;
+  gender: 'male' | 'female' | 'non-binary' | 'prefer_not_to_say' | null;
+  interests: string[];
+  preferences: Record<string, unknown>;
+  onboardingCompletedAt: string | null;
+  quickPinHash?: string | null;
+  createdAt: string;
+}
+
+export interface FamilyMemberItem {
+  userId: string;
+  role: 'owner' | 'parent' | 'child';
+  displayName: string;
+  email: string;
+  emailVerified: boolean;
+  age: number | null;
+  hasConsent?: boolean;
+}
+
+export interface AuthSessionResponse {
+  authenticated: boolean;
+  user: User | null;
+  profile: UserProfileData | null;
+  family: Family | null;
+  role: 'owner' | 'parent' | 'child' | null;
+  sessionToken?: string;
+}
+
+// Deprecated compatibility interface
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  role: 'owner' | 'parent' | 'child';
+  avatar?: string;
+  permissions?: string[];
+}
+
+export interface TableSummary {
+  name: string;
+  rowCount: number;
+  columns: Array<{ name: string; type: string; primaryKey?: boolean; notNull?: boolean }>;
+  indexes: string[];
+  description: string;
+}
+
+export interface DatabaseStatus {
+  engine: string;
+  version: string;
+  connected: boolean;
+  emptyStartStatus: { verified: boolean; message: string; freshStart: boolean };
+  fingerprintFormula: string;
+  r2Bucket: {
+    status: string;
+    objectCount: number;
+    totalBytes: number;
+    maxSizeBytes: number;
+    objects: Array<{ key: string; size: number; uploaded: string }>;
+  };
+  tables: TableSummary[];
+  rawSchemaSql: string;
+}
+
+export interface QueryResult {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount: number;
+  durationMs: number;
+  query: string;
+}
+
+export interface VerificationSuiteResult {
+  passed: boolean;
+  totalTests: number;
+  passedTests: number;
+  failedTests: number;
+  results: Array<{ name: string; passed: boolean; details: string }>;
+  durationMs: number;
+}
+
