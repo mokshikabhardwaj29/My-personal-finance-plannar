@@ -195,6 +195,7 @@ export interface NotePayPlannerSettings {
   savedAmount: number;
   dailyPlan: number;
   note: string;
+  entries?: Array<{ id: string; date: string; amount: number; category: string; note: string }>;
 }
 
 export interface AppSettings {
