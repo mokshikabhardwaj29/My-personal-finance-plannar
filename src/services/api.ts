@@ -203,7 +203,7 @@ export class ApiService {
         headers: this.getHeaders(),
       });
     } catch {
-      const netErr = new Error('Network failure: Unable to reach Ledgerly server. Please check your connection.');
+      const netErr = new Error('Network failure: Unable to reach NotePay server. Please check your connection.');
       (netErr as any).isNetworkError = true;
       throw netErr;
     }
@@ -419,7 +419,7 @@ export class ApiService {
         headers: this.getHeaders(),
       });
     } catch {
-      const netErr = new Error('Network failure: Unable to reach Ledgerly server. Please check your connection.');
+      const netErr = new Error('Network failure: Unable to reach NotePay server. Please check your connection.');
       (netErr as any).isNetworkError = true;
       throw netErr;
     }
@@ -573,7 +573,7 @@ export class ApiService {
     const res = await fetch('/api/game', {
       method: 'DELETE',
       headers: this.getHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ confirmation: 'RESET LEDGERLY PROGRESS' }),
+      body: JSON.stringify({ confirmation: 'RESET NOTEPAY PROGRESS' }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to reset progress' }));
@@ -586,7 +586,7 @@ export class ApiService {
     const res = await fetch('/api/state', {
       method: 'DELETE',
       headers: this.getHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ confirmation: 'DELETE ALL LEDGERLY DATA' }),
+      body: JSON.stringify({ confirmation: 'DELETE ALL NOTEPAY DATA' }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to erase data' }));
