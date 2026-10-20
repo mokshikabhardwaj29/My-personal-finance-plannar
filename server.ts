@@ -531,6 +531,11 @@ app.get('/api/state', (req: Request, res: Response) => {
 
     const game = gameEngine.getFullGameState();
     const settings = db.getAllSettings();
+    const plannerUserId = auth?.user?.id;
+    const notePayPlanner = plannerUserId
+      ? db.getSetting('notePayPlanner:' + plannerUserId, null)
+      : null;
+    if (notePayPlanner) settings.notePayPlanner = notePayPlanner;
 
     if (isChild) {
       // Child-Safe Scoped State: No family bank accounts, transactions, or receipts
@@ -543,6 +548,7 @@ app.get('/api/state', (req: Request, res: Response) => {
           accounts: ['My Digital Coin Jar'],
           goals: settings.goals || [],
           gameProfile: settings.gameProfile || {},
+          notePayPlanner: notePayPlanner || undefined,
           selectedPeriod: 'all-time',
         },
         documents: [],
@@ -896,8 +902,13 @@ app.put('/api/preferences', (req: Request, res: Response) => {
       const savedAmount = Number(planner.savedAmount);
       const dailyPlan = Number(planner.dailyPlan);
       const note = typeof planner.note === 'string' ? planner.note.slice(0, 100) : '';
+      const auth = (req as AuthenticatedRequest).auth;
+      if (!auth?.user?.id) {
+        return res.status(401).json({ error: 'Authentication required to save a pocket-money plan' });
+      }
       if ([allowance, savingsGoal, savedAmount, dailyPlan].every((value) => Number.isFinite(value) && value >= 0 && value <= 100000000)) {
-        db.setSetting('notePayPlanner', { allowance, savingsGoal, savedAmount, dailyPlan, note });
+        // Keep each account's planner separate without migrating or overwriting legacy settings.
+        db.setSetting('notePayPlanner:' + auth.user.id, { allowance, savingsGoal, savedAmount, dailyPlan, note });
       } else {
         return res.status(400).json({ error: 'Invalid pocket-money planner values' });
       }
