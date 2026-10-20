@@ -9,6 +9,7 @@ export interface NotePayPlanner {
   savedAmount: number;
   dailyPlan: number;
   note: string;
+  entries?: Array<{ id: string; date: string; amount: number; category: string; note: string }>;
 }
 
 type View = 'planner' | 'calendar' | 'interest';
@@ -18,6 +19,7 @@ interface Props {
   transactions: Transaction[];
   onSavePlanner: (planner: NotePayPlanner) => Promise<void>;
   initialView?: 'planner' | 'calendar' | 'interest';
+  role: 'owner' | 'parent' | 'child';
 }
 
 const DEFAULT_PLANNER: NotePayPlanner = { allowance: 500, savingsGoal: 2000, savedAmount: 0, dailyPlan: 100, note: '' };
@@ -27,7 +29,7 @@ const todayIso = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
 
-export const NotePayPlannerPage: React.FC<Props> = ({ settings, transactions, onSavePlanner, initialView = 'planner' }) => {
+export const NotePayPlannerPage: React.FC<Props> = ({ settings, transactions, onSavePlanner, initialView = 'planner', role }) => {
   const [view, setView] = useState<View>(initialView);
   useEffect(() => setView(initialView), [initialView]);
   const [planner, setPlanner] = useState<NotePayPlanner>({ ...DEFAULT_PLANNER, ...(settings.notePayPlanner || {}) });
@@ -41,22 +43,43 @@ export const NotePayPlannerPage: React.FC<Props> = ({ settings, transactions, on
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const [selectedDate, setSelectedDate] = useState(todayIso());
+  const [entryAmount, setEntryAmount] = useState('');
+  const [entryCategory, setEntryCategory] = useState('Snack');
+  const [entryNote, setEntryNote] = useState('');
 
   const expenses = useMemo(() => transactions.filter((t) => t.type === 'expense'), [transactions]);
   const monthKey = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+  const calendarItems = useMemo(() => [
+    ...expenses.map((tx) => ({ id: tx.id, date: tx.date, amount: Number(tx.amount || 0), category: tx.category, label: tx.merchant || 'Expense', source: 'transaction' as const })),
+    ...(planner.entries || []).map((entry) => ({ id: entry.id, date: entry.date, amount: Number(entry.amount || 0), category: entry.category, label: entry.note || entry.category, source: 'pocket' as const })),
+  ], [expenses, planner.entries]);
   const actualByDate = useMemo(() => {
     const totals: Record<string, number> = {};
-    expenses.forEach((tx) => { totals[tx.date] = (totals[tx.date] || 0) + Number(tx.amount || 0); });
+    calendarItems.forEach((item) => { totals[item.date] = (totals[item.date] || 0) + item.amount; });
     return totals;
-  }, [expenses]);
+  }, [calendarItems]);
   const actualThisMonth = Object.entries(actualByDate).filter(([date]) => date.startsWith(monthKey)).reduce((sum, [, value]) => sum + value, 0);
   const actualToday = actualByDate[todayIso()] || 0;
   const simpleInterest = (Math.max(0, principal) * Math.max(0, rate) * Math.max(0, years)) / 100;
   const amount = Math.max(0, principal) + simpleInterest;
   const firstDay = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const selectedTransactions = expenses.filter((tx) => tx.date === selectedDate);
-  const selectedTotal = selectedTransactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+  const selectedItems = calendarItems.filter((item) => item.date === selectedDate);
+  const selectedTotal = selectedItems.reduce((sum, item) => sum + item.amount, 0);
+
+  const addPocketExpense = async () => {
+    const amountValue = Number(entryAmount);
+    if (!Number.isFinite(amountValue) || amountValue <= 0 || amountValue > 1000000) return;
+    const nextPlanner = {
+      ...planner,
+      entries: [...(planner.entries || []), { id: `pocket_${Date.now()}`, date: selectedDate, amount: amountValue, category: entryCategory, note: entryNote.trim().slice(0, 100) }].slice(-500),
+    };
+    await onSavePlanner(nextPlanner);
+    setPlanner(nextPlanner);
+    setEntryAmount('');
+    setEntryNote('');
+    setSavedMessage('Expense saved to your pocket-money calendar.');
+  };
 
   const savePlanner = async () => {
     setSaving(true);
@@ -169,7 +192,16 @@ export const NotePayPlannerPage: React.FC<Props> = ({ settings, transactions, on
           </div>
           <aside className="rounded-3xl border border-slate-200 bg-white p-5 md:p-7">
             <p className="text-xs font-bold uppercase tracking-wide text-violet-700">Selected day</p><h3 className="mt-1 text-xl font-black">{new Date(`${selectedDate}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' })}</h3><p className="mt-2 text-3xl font-black text-slate-900">{money(selectedTotal)}</p><p className="text-sm text-slate-500">Recorded expenses</p>
-            <div className="mt-5 space-y-3">{selectedTransactions.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No expenses recorded for this date. That does not mean you did anything wrong—this calendar only shows saved transactions.</p> : selectedTransactions.map((tx) => <div key={tx.id} className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3"><div><p className="font-semibold text-slate-800">{tx.merchant || 'Expense'}</p><p className="text-xs text-slate-500">{tx.category}</p></div><strong className="text-sm">{money(tx.amount)}</strong></div>)}</div>
+            <div className="mt-5 space-y-3">{selectedItems.length === 0 ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">No expenses recorded for this date. That does not mean you did anything wrong—this calendar only shows saved transactions.</p> : selectedItems.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3"><div><p className="font-semibold text-slate-800">{item.label}</p><p className="text-xs text-slate-500">{item.category}{item.source === 'pocket' ? ' · Pocket entry' : ''}</p></div><strong className="text-sm">{money(item.amount)}</strong></div>)}</div>
+            {role === 'child' && <form className="mt-6 border-t border-slate-100 pt-5" onSubmit={(event) => { event.preventDefault(); void addPocketExpense(); }}>
+              <h4 className="font-bold text-slate-900">Add a pocket-money expense</h4>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Only your own pocket-money entries are saved here. Your family’s main transaction history stays unchanged.</p>
+              <label className="mt-3 block text-sm font-semibold text-slate-700">Amount (₹)<input required type="number" min="1" max="1000000" step="0.01" value={entryAmount} onChange={(e) => setEntryAmount(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" /></label>
+              <label className="mt-3 block text-sm font-semibold text-slate-700">Category<select value={entryCategory} onChange={(e) => setEntryCategory(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5"><option>Snack</option><option>Stationery</option><option>Transport</option><option>Fun</option><option>Gift</option><option>Other</option></select></label>
+              <label className="mt-3 block text-sm font-semibold text-slate-700">What was it for?<input maxLength={100} value={entryNote} onChange={(e) => setEntryNote(e.target.value)} placeholder="Optional note" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5" /></label>
+              <button type="submit" className="mt-3 w-full rounded-xl bg-violet-700 px-4 py-3 font-bold text-white hover:bg-violet-800">Save expense</button>
+              <p aria-live="polite" className="mt-2 text-xs text-slate-500">{savedMessage}</p>
+            </form>}
           </aside>
         </section>
       )}
