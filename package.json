@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "notepay",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -35,5 +35,6 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2"
-  }
+  },
+  "description": "NotePay — Learn Money. Plan Smarter. Grow Confidently."
 }
