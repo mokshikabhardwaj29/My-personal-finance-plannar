@@ -888,6 +888,21 @@ app.put('/api/preferences', (req: Request, res: Response) => {
       db.setSetting('selectedPeriod', body.selectedPeriod);
     }
 
+    // NotePay planner settings are stored alongside existing preferences; never replace the full state.
+    if (body.notePayPlanner !== undefined && body.notePayPlanner && typeof body.notePayPlanner === 'object' && !Array.isArray(body.notePayPlanner)) {
+      const planner = body.notePayPlanner as Record<string, unknown>;
+      const allowance = Number(planner.allowance);
+      const savingsGoal = Number(planner.savingsGoal);
+      const savedAmount = Number(planner.savedAmount);
+      const dailyPlan = Number(planner.dailyPlan);
+      const note = typeof planner.note === 'string' ? planner.note.slice(0, 100) : '';
+      if ([allowance, savingsGoal, savedAmount, dailyPlan].every((value) => Number.isFinite(value) && value >= 0 && value <= 100000000)) {
+        db.setSetting('notePayPlanner', { allowance, savingsGoal, savedAmount, dailyPlan, note });
+      } else {
+        return res.status(400).json({ error: 'Invalid pocket-money planner values' });
+      }
+    }
+
     if (body.userTimezone !== undefined && typeof body.userTimezone === 'string') {
       db.setSetting('userTimezone', body.userTimezone);
     }
