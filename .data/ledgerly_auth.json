@@ -1,0 +1,202 @@
+{
+  "users": [
+    {
+      "id": "usr_1792492105220_29c2797e84311d21",
+      "email": "family.owner@example.com",
+      "passwordHash": "pbkdf2_sha256$600000$afbd595cd6d917207315e4085645bd5b$da84f144d7bc626518af5023d4bdf903c73109e0e909d9bbcafdafee2400b89f",
+      "emailVerifiedAt": null,
+      "status": "pending_verification",
+      "createdAt": "2026-10-20T10:28:25.338Z"
+    },
+    {
+      "id": "usr_child_1792492131666_1de4ae515468",
+      "email": "child_69b0cbe5@family.ledgerly.internal",
+      "passwordHash": "pbkdf2_sha256$600000$bf3f1d90c26bf2136924de3ec7e928ce$3d8fccd61817dd1f0136416230108e8837816d5ad014f655bc484ae61ad8c95a",
+      "emailVerifiedAt": "2026-10-20T10:28:51.779Z",
+      "status": "active",
+      "createdAt": "2026-10-20T10:28:51.779Z"
+    }
+  ],
+  "families": [
+    {
+      "id": "family_default_v1",
+      "name": "Primary Family Vault",
+      "createdAt": "2026-10-20T09:42:00.070Z"
+    }
+  ],
+  "familyMembers": [
+    {
+      "userId": "usr_1792492105220_29c2797e84311d21",
+      "familyId": "family_default_v1",
+      "role": "owner",
+      "createdAt": "2026-10-20T10:28:25.338Z"
+    },
+    {
+      "userId": "usr_child_1792492131666_1de4ae515468",
+      "familyId": "family_default_v1",
+      "role": "child",
+      "createdAt": "2026-10-20T10:28:51.779Z"
+    }
+  ],
+  "parentChildLinks": [
+    {
+      "parentUserId": "usr_1792492105220_29c2797e84311d21",
+      "childUserId": "usr_child_1792492131666_1de4ae515468",
+      "familyId": "family_default_v1",
+      "createdAt": "2026-10-20T10:28:51.779Z"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "4575f24cfabd8475999dc5c6cc487d233f7746018a657f9b7f8b6963cbe4ff90",
+      "userId": "usr_1792492105220_29c2797e84311d21",
+      "familyId": "family_default_v1",
+      "expiresAt": "2026-10-27T10:28:25.341Z",
+      "createdAt": "2026-10-20T10:28:25.341Z",
+      "lastSeenAt": "2026-10-20T10:29:32.481Z",
+      "ip": "127.0.0.1",
+      "isActive": false
+    },
+    {
+      "id": "13bca8136be3107414ce9c9b9e1a836d9c974150e81901d6a9aa9063b7722083",
+      "userId": "usr_child_1792492131666_1de4ae515468",
+      "familyId": "family_default_v1",
+      "expiresAt": "2026-10-27T10:28:57.061Z",
+      "createdAt": "2026-10-20T10:28:57.061Z",
+      "lastSeenAt": "2026-10-20T10:29:15.073Z",
+      "ip": "127.0.0.1",
+      "isActive": true
+    }
+  ],
+  "emailTokens": [
+    {
+      "id": "tok_1792492105338_45e5d5f79778",
+      "userId": "usr_1792492105220_29c2797e84311d21",
+      "type": "verify",
+      "tokenHash": "8cfc6ce844d6912b955e35cb902c73a28f825830f08b6d797f2f3b0edc22287b",
+      "expiresAt": "2026-10-21T10:28:25.338Z",
+      "usedAt": null,
+      "createdAt": "2026-10-20T10:28:25.338Z"
+    }
+  ],
+  "profiles": [
+    {
+      "userId": "usr_1792492105220_29c2797e84311d21",
+      "displayName": "Family Organizer",
+      "dateOfBirth": null,
+      "age": null,
+      "gender": null,
+      "interests": [],
+      "preferences": {},
+      "onboardingCompletedAt": null,
+      "quickPinHash": null,
+      "createdAt": "2026-10-20T10:28:25.338Z"
+    },
+    {
+      "userId": "usr_child_1792492131666_1de4ae515468",
+      "displayName": "Timmy",
+      "dateOfBirth": "2015-06-15",
+      "age": 11,
+      "gender": null,
+      "interests": [
+        "piggy_bank",
+        "saving_habits"
+      ],
+      "preferences": {
+        "allowPennyBuddy": true
+      },
+      "onboardingCompletedAt": "2026-10-20T10:28:51.779Z",
+      "quickPinHash": "3d1a2b5f1aac6db816364974c475b36a7e4babd957884942c813fc6e5da98106",
+      "createdAt": "2026-10-20T10:28:51.779Z"
+    }
+  ],
+  "consents": [
+    {
+      "id": "cst_1792492131797_267e75e1a099",
+      "childUserId": "usr_child_1792492131666_1de4ae515468",
+      "parentUserId": "usr_1792492105220_29c2797e84311d21",
+      "type": "dpdp_parental_consent",
+      "grantedAt": "2026-10-20T10:28:51.779Z",
+      "revokedAt": null,
+      "ip": "127.0.0.1",
+      "metadata": {
+        "guardianConfirmed": true,
+        "act": "India DPDP Act 2023 - Section 9 (Processing of personal data of children)",
+        "ageReported": 11
+      }
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "aud_1792492105340_e53fe7da620f",
+      "actorUserId": "usr_1792492105220_29c2797e84311d21",
+      "action": "register",
+      "target": "family.owner@example.com",
+      "familyId": "family_default_v1",
+      "ip": "127.0.0.1",
+      "details": {
+        "role": "owner"
+      },
+      "createdAt": "2026-10-20T10:28:25.340Z"
+    },
+    {
+      "id": "aud_1792492131797_4c52a192fdd4",
+      "actorUserId": "usr_1792492105220_29c2797e84311d21",
+      "action": "create_child_account",
+      "target": "usr_child_1792492131666_1de4ae515468",
+      "familyId": "family_default_v1",
+      "ip": "127.0.0.1",
+      "details": {
+        "childName": "Timmy",
+        "age": 11
+      },
+      "createdAt": "2026-10-20T10:28:51.797Z"
+    },
+    {
+      "id": "aud_1792492137061_1e077ded07b3",
+      "actorUserId": "usr_child_1792492131666_1de4ae515468",
+      "action": "pin_unlock",
+      "familyId": "family_default_v1",
+      "ip": "127.0.0.1",
+      "details": {
+        "role": "child"
+      },
+      "createdAt": "2026-10-20T10:28:57.061Z"
+    },
+    {
+      "id": "aud_1792492145947_fc9543541f72",
+      "actorUserId": "usr_child_1792492131666_1de4ae515468",
+      "action": "permission_denied_403",
+      "familyId": "family_default_v1",
+      "ip": "127.0.0.1",
+      "details": {
+        "path": "/api/database/status",
+        "method": "GET",
+        "role": "child"
+      },
+      "createdAt": "2026-10-20T10:29:05.947Z"
+    },
+    {
+      "id": "aud_1792492151027_93b4143fafab",
+      "actorUserId": "usr_child_1792492131666_1de4ae515468",
+      "action": "permission_denied_403",
+      "familyId": "family_default_v1",
+      "ip": "127.0.0.1",
+      "details": {
+        "path": "/api/family/invites",
+        "method": "POST",
+        "role": "child"
+      },
+      "createdAt": "2026-10-20T10:29:11.027Z"
+    },
+    {
+      "id": "aud_1792492172482_cabafa0c6077",
+      "actorUserId": "usr_1792492105220_29c2797e84311d21",
+      "action": "logout",
+      "familyId": "family_default_v1",
+      "ip": "127.0.0.1",
+      "details": {},
+      "createdAt": "2026-10-20T10:29:32.482Z"
+    }
+  ]
+}

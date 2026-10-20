@@ -269,6 +269,7 @@ export const PUBLIC_AUTH_ROUTES = new Set([
   '/api/auth/reset-password',
   '/api/auth/pin-unlock',
   '/api/auth/claim-status',
+  '/api/auth/session',
 ]);
 
 /**
@@ -310,6 +311,21 @@ export function authorizationMiddleware(req: Request, res: Response, next: NextF
     return next();
   }
 
+  // Pre-resolve session token if present so endpoints (including public ones) can inspect req.auth
+  const sessionToken = extractSessionToken(req);
+  if (sessionToken) {
+    const validation = authService.validateSessionToken(sessionToken);
+    if (validation.valid && validation.user && validation.family && validation.role) {
+      (req as AuthenticatedRequest).auth = {
+        user: validation.user,
+        profile: validation.profile!,
+        family: validation.family,
+        role: validation.role,
+        sessionToken,
+      };
+    }
+  }
+
   // Allow public endpoints
   if (PUBLIC_AUTH_ROUTES.has(req.path)) {
     return next();
@@ -323,10 +339,10 @@ export function authorizationMiddleware(req: Request, res: Response, next: NextF
       bearerToken = authHeader.slice(7).trim();
     }
     const customDriveKey = req.headers['x-drive-sync-key'] as string | undefined;
-    const token = bearerToken || customDriveKey;
+    const driveKey = bearerToken || customDriveKey;
 
     const expectedKey = process.env.DRIVE_SYNC_TOKEN || DEFAULT_DRIVE_SYNC_SERVICE_KEY;
-    if (token && token === expectedKey) {
+    if (driveKey && driveKey === expectedKey) {
       // Authorized via service token bypass
       (req as AuthenticatedRequest).auth = {
         user: {
@@ -351,7 +367,7 @@ export function authorizationMiddleware(req: Request, res: Response, next: NextF
         },
         family: { id: 'family_default_v1', name: 'Primary Family Vault', createdAt: '' },
         role: 'owner',
-        sessionToken: token,
+        sessionToken: driveKey,
         isDriveSyncService: true,
       };
       return next();
@@ -359,8 +375,7 @@ export function authorizationMiddleware(req: Request, res: Response, next: NextF
   }
 
   // Extract session token
-  const token = extractSessionToken(req);
-  if (!token) {
+  if (!sessionToken) {
     res.status(401).json({
       error: 'Unauthenticated: Valid session token required',
       path: req.path,
@@ -369,7 +384,7 @@ export function authorizationMiddleware(req: Request, res: Response, next: NextF
   }
 
   // Validate session against database
-  const validation = authService.validateSessionToken(token);
+  const validation = authService.validateSessionToken(sessionToken);
   if (!validation.valid || !validation.user || !validation.family || !validation.role) {
     res.status(401).json({
       error: validation.error || 'Unauthenticated: Invalid or expired session',
@@ -383,7 +398,7 @@ export function authorizationMiddleware(req: Request, res: Response, next: NextF
     profile: validation.profile!,
     family: validation.family,
     role: validation.role,
-    sessionToken: token,
+    sessionToken,
   };
 
   (req as AuthenticatedRequest).auth = authData;

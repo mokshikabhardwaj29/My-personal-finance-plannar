@@ -187,13 +187,7 @@ export class ApiService {
     family: any | null;
     role: 'owner' | 'parent' | 'child' | null;
   }> {
-    const res = await fetch('/api/auth/me', {
-      headers: this.getHeaders(),
-    });
-    if (!res.ok) {
-      return { authenticated: false, user: null, profile: null, family: null, role: null };
-    }
-    return res.json();
+    return this.getSession();
   }
 
   async getSession(): Promise<{
@@ -203,7 +197,42 @@ export class ApiService {
     family: any | null;
     role: 'owner' | 'parent' | 'child' | null;
   }> {
-    return this.getMe();
+    let res: Response;
+    try {
+      res = await fetch('/api/auth/session', {
+        headers: this.getHeaders(),
+      });
+    } catch {
+      const netErr = new Error('Network failure: Unable to reach Ledgerly server. Please check your connection.');
+      (netErr as any).isNetworkError = true;
+      throw netErr;
+    }
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        this.setAuthToken(null);
+        return { authenticated: false, user: null, profile: null, family: null, role: null };
+      }
+      if (res.status === 403) {
+        const authErr = new Error('Forbidden: You do not have permission to access this resource.');
+        (authErr as any).status = 403;
+        throw authErr;
+      }
+      if (res.status >= 500) {
+        const srvErr = new Error(`Server error (${res.status}): Failed to verify session`);
+        (srvErr as any).status = res.status;
+        throw srvErr;
+      }
+      const connErr = new Error(`Connection error (${res.status}): Failed to verify session`);
+      (connErr as any).status = res.status;
+      throw connErr;
+    }
+
+    const data = await res.json();
+    if (!data.authenticated) {
+      this.setAuthToken(null);
+    }
+    return data;
   }
 
   async completeOnboarding(payload: {
@@ -384,12 +413,22 @@ export class ApiService {
   // ==========================================================================
 
   async fetchState(): Promise<AppStatePayload> {
-    const res = await fetch('/api/state', {
-      headers: this.getHeaders(),
-    });
+    let res: Response;
+    try {
+      res = await fetch('/api/state', {
+        headers: this.getHeaders(),
+      });
+    } catch {
+      const netErr = new Error('Network failure: Unable to reach Ledgerly server. Please check your connection.');
+      (netErr as any).isNetworkError = true;
+      throw netErr;
+    }
+
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Failed to fetch state' }));
-      throw new Error(err.error || 'Failed to fetch state');
+      const error = new Error(err.error || 'Failed to fetch state');
+      (error as any).status = res.status;
+      throw error;
     }
     return res.json();
   }

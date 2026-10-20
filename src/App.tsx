@@ -50,8 +50,10 @@ import { OnboardingPage } from './pages/OnboardingPage';
 import { DatabasePage } from './pages/DatabasePage';
 
 export default function App() {
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Application initialization & loading states
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
   const [appState, setAppState] = useState<AppStatePayload | null>(null);
 
   // Authentication & Session
@@ -94,28 +96,16 @@ export default function App() {
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
 
-  // Initial load
+  // Load state permitted for the authenticated user
   const loadState = useCallback(async () => {
     try {
-      setLoadError(null);
-      const [data, sess] = await Promise.all([
-        api.fetchState(),
-        api.getSession().catch(() => ({ authenticated: false, user: null })),
-      ]);
+      setDataLoading(true);
+      setConnectionError(null);
+      const data = await api.fetchState();
       setAppState(data);
 
-      if (sess && sess.user) {
-        setCurrentUser({
-          id: sess.user.id,
-          email: sess.user.email,
-          name: sess.profile?.displayName || sess.user.email.split('@')[0],
-          role: sess.role || 'owner',
-        });
-        setUserProfile(sess.profile);
-      }
-
       // Period restore
-      const savedPeriod = (data.settings.selectedPeriod as PeriodKey) || 'all-time';
+      const savedPeriod = (data.settings?.selectedPeriod as PeriodKey) || 'all-time';
       setSelectedPeriod(savedPeriod);
 
       // Check for unseen away activity from 8:00 AM automation
@@ -132,18 +122,85 @@ export default function App() {
         }
       }
     } catch (err: unknown) {
-      setLoadError(err instanceof Error ? err.message : 'Failed to connect to Ledgerly');
+      const errorWithStatus = err as { status?: number; isNetworkError?: boolean; message?: string };
+      if (errorWithStatus?.status === 401) {
+        // Session expired or revoked on server
+        api.setAuthToken(null);
+        setCurrentUser(null);
+        setUserProfile(null);
+        setAppState(null);
+        setIsLocked(true);
+        return;
+      }
+      if (errorWithStatus?.status === 403) {
+        // Authorization error (user's role doesn't permit state access) - keep session, record error
+        setConnectionError('Access forbidden: your account does not have permission to view these records.');
+        return;
+      }
+      setConnectionError(err instanceof Error ? err.message : 'Failed to connect to Ledgerly');
     } finally {
-      setLoading(false);
+      setDataLoading(false);
     }
   }, []);
 
-  const handleAuthSuccess = (sessionData: {
+  // Step 1: Check session first on startup without requesting protected financial state
+  const bootstrapAuth = useCallback(async () => {
+    try {
+      setIsInitializing(true);
+      setConnectionError(null);
+
+      const sess = await api.getSession();
+
+      if (!sess || !sess.authenticated || !sess.user) {
+        // Clean logged-out state: show login/signup screen directly
+        api.setAuthToken(null);
+        setCurrentUser(null);
+        setUserProfile(null);
+        setAppState(null);
+        setIsLocked(true);
+        return;
+      }
+
+      // Valid session found: establish identity
+      setCurrentUser({
+        id: sess.user.id,
+        email: sess.user.email,
+        name: sess.profile?.displayName || sess.user.email.split('@')[0],
+        role: sess.role || 'owner',
+      });
+      setUserProfile(sess.profile);
+      setIsLocked(false);
+
+      if (sess.role === 'child') {
+        setCurrentTab('kids');
+      }
+
+      // Step 2: Now load protected financial state for this verified user
+      await loadState();
+    } catch (err: unknown) {
+      const errorWithStatus = err as { status?: number; isNetworkError?: boolean; message?: string };
+      // Distinguish 401 (not logged in) from genuine network or server failure
+      if (errorWithStatus?.status === 401) {
+        api.setAuthToken(null);
+        setCurrentUser(null);
+        setUserProfile(null);
+        setAppState(null);
+        setIsLocked(true);
+        return;
+      }
+      setConnectionError(err instanceof Error ? err.message : 'Failed to connect to Ledgerly');
+    } finally {
+      setIsInitializing(false);
+    }
+  }, [loadState]);
+
+  const handleAuthSuccess = async (sessionData: {
     user: any;
     profile: any;
     family: any;
     role: 'owner' | 'parent' | 'child';
   }) => {
+    setConnectionError(null);
     setCurrentUser({
       id: sessionData.user.id,
       email: sessionData.user.email,
@@ -155,7 +212,7 @@ export default function App() {
     if (sessionData.role === 'child') {
       setCurrentTab('kids');
     }
-    loadState();
+    await loadState();
   };
 
   const handleOnboardingCompleted = (updatedProfile: any) => {
@@ -178,15 +235,31 @@ export default function App() {
   };
 
   const handleLogout = async () => {
-    await api.logout();
+    try {
+      await api.logout();
+    } catch {
+      // Ignore network errors on logout
+    }
+    api.setAuthToken(null);
     setCurrentUser(null);
     setUserProfile(null);
+    setAppState(null);
     setIsLocked(true);
+    setCurrentTab('dashboard');
+  };
+
+  const handleRetry = () => {
+    setConnectionError(null);
+    if (currentUser) {
+      loadState();
+    } else {
+      bootstrapAuth();
+    }
   };
 
   useEffect(() => {
-    loadState();
-  }, [loadState]);
+    bootstrapAuth();
+  }, [bootstrapAuth]);
 
   // Persist selected period
   const handleSelectPeriod = async (period: PeriodKey) => {
@@ -509,32 +582,34 @@ export default function App() {
     setCurrentTab('dashboard');
   };
 
-  // Loading Screen (Penny thinking)
-  if (loading) {
+  // 1. Initial Loading Screen (Penny thinking) during session verification or data loading for logged in user
+  if (isInitializing || (dataLoading && !appState && currentUser)) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center select-none">
         <Penny mood="thinking" size={96} showSpeech={false} />
         <h2 className="text-xl font-black text-gray-900 mt-6 tracking-tight">
           Ledgerly
         </h2>
-        <p className="text-xs text-gray-500 mt-1">Connecting to your private financial ledger...</p>
+        <p className="text-xs text-gray-500 mt-1">
+          {isInitializing ? 'Checking secure session...' : 'Loading your family records...'}
+        </p>
       </div>
     );
   }
 
-  // Error Screen
-  if (loadError || !appState) {
+  // 2. Genuine Connection or Server Error Screen
+  if (connectionError && (!appState || !currentUser)) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center select-none">
         <Penny mood="concerned" size={88} showSpeech={false} />
         <h2 className="text-xl font-bold text-gray-900 mt-6">Unable to Connect</h2>
         <p className="text-xs text-gray-600 max-w-sm mt-2 mb-6">
-          {loadError || 'Could not load your Ledgerly state from the server.'}
+          {connectionError}
         </p>
         <button
           type="button"
-          onClick={loadState}
-          className="px-6 py-2.5 rounded-xl bg-violet-600 text-white font-bold text-xs shadow hover:bg-violet-700 transition"
+          onClick={handleRetry}
+          className="px-6 py-2.5 rounded-xl bg-violet-600 text-white font-bold text-xs shadow hover:bg-violet-700 transition cursor-pointer"
         >
           Retry Connection
         </button>
@@ -542,7 +617,7 @@ export default function App() {
     );
   }
 
-  // Lock / Login Screen
+  // 3. Lock / Login Screen (Unauthenticated visitors transition directly to AuthPage)
   if (isLocked || !currentUser) {
     return (
       <AuthPage
@@ -551,13 +626,26 @@ export default function App() {
     );
   }
 
-  // First-time onboarding screen
+  // 4. First-time onboarding screen
   if (currentUser && userProfile && !userProfile.onboardingCompletedAt) {
     return (
       <OnboardingPage
         initialDisplayName={userProfile.displayName || currentUser.name}
         onCompleted={handleOnboardingCompleted}
       />
+    );
+  }
+
+  // 5. Fallback loading state while appState is being populated for authenticated user
+  if (!appState) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 text-center select-none">
+        <Penny mood="thinking" size={96} showSpeech={false} />
+        <h2 className="text-xl font-black text-gray-900 mt-6 tracking-tight">
+          Ledgerly
+        </h2>
+        <p className="text-xs text-gray-500 mt-1">Loading your family records...</p>
+      </div>
     );
   }
 

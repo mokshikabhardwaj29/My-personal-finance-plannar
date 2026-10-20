@@ -212,6 +212,34 @@ app.post('/api/auth/reset-password', async (req: Request, res: Response) => {
   }
 });
 
+// Safe session-status endpoint: reports whether caller is authenticated without exposing private financial data
+app.get('/api/auth/session', (req: Request, res: Response) => {
+  const auth = (req as AuthenticatedRequest).auth;
+  if (!auth) {
+    res.json({
+      authenticated: false,
+      user: null,
+      profile: null,
+      family: null,
+      role: null,
+    });
+    return;
+  }
+
+  res.json({
+    authenticated: true,
+    user: {
+      id: auth.user.id,
+      email: auth.user.email,
+      emailVerified: Boolean(auth.user.emailVerifiedAt),
+      status: auth.user.status,
+    },
+    profile: auth.profile,
+    family: auth.family,
+    role: auth.role,
+  });
+});
+
 // Fetch caller's authenticated user profile & family details
 app.get('/api/auth/me', (req: Request, res: Response) => {
   const auth = (req as AuthenticatedRequest).auth;
