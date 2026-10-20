@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import {
   LayoutDashboard,
+  CalendarDays,
+  WalletCards,
+  Calculator,
   Receipt,
   RotateCw,
   CreditCard,
@@ -30,6 +33,9 @@ import { Penny } from './Penny';
 
 export type TabKey =
   | 'dashboard'
+  | 'planner'
+  | 'calendar'
+  | 'interest'
   | 'transactions'
   | 'recurring'
   | 'subscriptions'
@@ -61,9 +67,12 @@ const ALL_TABS: Array<{
   badge?: string;
   allowedRoles: Array<'owner' | 'parent' | 'child'>;
 }> = [
-  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, allowedRoles: ['owner', 'parent'] },
+  { key: 'dashboard', label: 'Home', icon: LayoutDashboard, allowedRoles: ['owner', 'parent', 'child'] },
+  { key: 'planner', label: 'Pocket Planner', icon: WalletCards, allowedRoles: ['owner', 'parent', 'child'] },
+  { key: 'calendar', label: 'Spending Calendar', icon: CalendarDays, allowedRoles: ['owner', 'parent', 'child'] },
+  { key: 'interest', label: 'Simple Interest', icon: Calculator, allowedRoles: ['owner', 'parent', 'child'] },
   { key: 'transactions', label: 'Transactions', icon: Receipt, allowedRoles: ['owner', 'parent'] },
-  { key: 'kids', label: 'Kids Academy', icon: Sparkles, badge: 'AI', allowedRoles: ['owner', 'parent', 'child'] },
+  { key: 'kids', label: 'Learn & Ask Penny', icon: Sparkles, badge: 'AI', allowedRoles: ['owner', 'parent', 'child'] },
   { key: 'goals', label: 'Goals', icon: Target, allowedRoles: ['owner', 'parent', 'child'] },
   { key: 'rewards', label: 'Rewards', icon: Award, allowedRoles: ['owner', 'parent', 'child'] },
   { key: 'recurring', label: 'Recurring', icon: RotateCw, allowedRoles: ['owner', 'parent'] },
@@ -106,7 +115,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       : 'bg-amber-100 text-amber-800 border-amber-200';
 
   const roleLabel =
-    userRole === 'owner' ? 'Owner' : userRole === 'parent' ? 'Parent' : 'Child';
+    userRole === 'owner' ? 'Family Owner' : userRole === 'parent' ? 'Parent' : 'Learner';
 
   return (
     <>
@@ -117,9 +126,9 @@ export const Navigation: React.FC<NavigationProps> = ({
           <Penny mood="idle" size={40} showSpeech={false} enabled={game.profile?.showPenny} />
           <div>
             <h1 className="font-display text-2xl font-black tracking-tight text-[#7f27a8] leading-none flex items-center gap-1">
-              Ledgerly <span className="text-xs text-[#f76400]">✨</span>
+              NotePay <span className="text-xs text-[#f76400]">✨</span>
             </h1>
-            <p className="text-[11px] font-bold text-[#8c8273] mt-1 font-body">Kid & Family Finance</p>
+            <p className="text-[11px] font-bold text-[#8c8273] mt-1 font-body">Learn Money. Plan Smarter.</p>
           </div>
         </div>
 
