@@ -118,14 +118,14 @@ export async function getExpectedOwnerKey(env: CloudflareEnv): Promise<string> {
     }
   }
 
-  return 'ledgerly_default_master_owner_key_sec_01';
+  return '';
 }
 
 /**
  * Retrieve expected Drive Sync service token
  */
 export function getExpectedDriveSyncToken(env: CloudflareEnv): string {
-  return env.DRIVE_SYNC_TOKEN || env.CRON_SECRET || DEFAULT_DRIVE_SYNC_SERVICE_KEY;
+  return env.DRIVE_SYNC_TOKEN || env.CRON_SECRET || '';
 }
 
 /**
@@ -190,7 +190,6 @@ export async function cloudflareWorkerAuthMiddleware(
   const bearerToken = extractBearerToken(authHeader);
   const customOwnerKey = request.headers.get('x-ledgerly-owner-key');
   const customDriveKey = request.headers.get('x-drive-sync-key');
-  const cronHeader = request.headers.get('cf-cron') || request.headers.get('x-cloudflare-cron');
 
   // ==========================================================================
   // 3. Requested Feature: Bearer Token Header Bypass for /api/drive-sync
@@ -211,9 +210,6 @@ export async function cloudflareWorkerAuthMiddleware(
         const expectedOwnerKey = await getExpectedOwnerKey(env);
         isDriveSyncAuthorized = await timingSafeEqualString(candidateDriveToken, expectedOwnerKey);
       }
-    } else if (cronHeader) {
-      // Internal Cloudflare Cron Trigger scheduled at 8:00 AM
-      isDriveSyncAuthorized = true;
     }
 
     if (isDriveSyncAuthorized) {
