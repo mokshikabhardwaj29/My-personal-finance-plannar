@@ -835,6 +835,7 @@ export default function App() {
             initialView={currentTab as 'planner' | 'calendar' | 'interest'}
             settings={settings}
             transactions={transactions}
+            role={currentUser.role}
             onSavePlanner={async (planner) => {
               const result = await api.savePreferences({ notePayPlanner: planner });
               if (result.gameDelta) setLastGameDelta(result.gameDelta);
