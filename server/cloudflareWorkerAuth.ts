@@ -6,7 +6,7 @@
  * 2. Route-level protection for all `/api/*` endpoints.
  * 3. Constant-time timing-safe token comparison using Web Crypto API.
  * 4. D1-backed session and owner-key validation.
- * 5. Bearer token header bypass for automated `/api/drive-sync` (scheduled 8:00 AM ingestion).
+ * 5. Explicitly configured bearer token for automated `/api/drive-sync` ingestion.
  */
 
 import { D1Database, R2Bucket } from './d1R2Adapter.js';
@@ -36,11 +36,6 @@ const PUBLIC_API_ROUTES = new Set([
   '/api/auth/accounts',
   '/api/auth/token',
 ]);
-
-/**
- * Default fallback drive sync service key for automated 8:00 AM Cloudflare Cron & Drive triggers
- */
-export const DEFAULT_DRIVE_SYNC_SERVICE_KEY = 'ledg_drive_sync_service_token_auto_8am';
 
 /**
  * Constant-time string comparison using Web Crypto API to prevent side-channel timing attacks
@@ -122,7 +117,7 @@ export async function getExpectedOwnerKey(env: CloudflareEnv): Promise<string> {
 }
 
 /**
- * Retrieve expected Drive Sync service token
+ * Retrieve expected Drive Sync service token; fail closed when no secret is configured.
  */
 export function getExpectedDriveSyncToken(env: CloudflareEnv): string {
   return env.DRIVE_SYNC_TOKEN || env.CRON_SECRET || '';
